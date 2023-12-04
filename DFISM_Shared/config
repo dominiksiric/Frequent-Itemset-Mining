@@ -1,0 +1,21 @@
+# Slaves and master uses a common distributed file system or their own local hard disks
+IS_DISTRIBUTED_FILE_SYSTEM = true
+
+# Auto mode or interactive mode
+IS_AUTO_MODE = false
+
+# If auto mode = true, parameters for DIFIN are provided in this file
+DIFIN_PARAMETERS_FILE = ./difin_parameters
+
+# slave port for slave process on each node
+SLAVE_PORT = 9000
+
+INPUT_DATA_DIRECTORY = ./input_data/
+OUTPUT_DATA_DIRECTORY = ./output_data/
+INCREMENTAL_DIRECTORY = ./inc_data/
+
+# If slaves and master use a common distributed file system, slaves will store their IP:Port to this directory 
+SLAVE_ADDRESS_DIRECTORY = ./slave_address/
+
+# If slaves and master use their own local hard disks, IP:Port of slaves must be configured in advance in this file
+SLAVE_ADDRESS_FILE = ./slave_address_file
