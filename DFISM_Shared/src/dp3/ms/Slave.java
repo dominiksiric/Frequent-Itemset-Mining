@@ -45,6 +45,11 @@ public class Slave {
     private static List<String> globalFrequentItems; // To store global frequent items received from the master
     private static List<List<String>> globalNLists;   // To store global N-lists of 2-itemsets received from the master
 
+    private static final String TASK_REQUEST = "TASK_REQUEST";
+    private static final String NO_MORE_TASK = "NO_MORE_TASK";
+    private static final String TASK_COMPLETED = "TASK_COMPLETED";
+    private static final String NUM_FREQ_ITEMSETS = "NUM_FREQ_ITEMSETS";
+
     public static void main(String[] args) {
         try{
             Config.parse();
@@ -69,6 +74,8 @@ public class Slave {
             ID = dis.readInt();
             String[] parameters = dis.readUTF().split(" ");
 
+            handleMasterCommunication();
+
             //Get the mining option
             MiningModes miningMode = MiningModes.valueOf(parameters[0].toUpperCase());
             switch(miningMode){
@@ -81,9 +88,28 @@ public class Slave {
                 default:
                     return;
             }
+            while (true) {
+                String task = receiveTask();
+                if (task.equals(NO_MORE_TASK)) {
+                    // No more tasks, inform the Master and exit the loop
+                    sendTaskCompleted();
+                    break;
+                }
+
+                // Process the task and send the result
+                int numFreqItemsets = processTask(task);
+                sendTaskCompleted(numFreqItemsets);
+            }
+
         } catch(Exception e){
             try {serverSocket.close();} catch (IOException ioe) {ioe.printStackTrace();}
             e.printStackTrace();
+        } finally {
+            try {
+                serverSocket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -125,7 +151,7 @@ public class Slave {
         System.out.println();
     }
 
-    // Receiving frequent items and N-lists of 2-itemsets (later: achieving frequent global frequent items)
+    // Receiving frequent items and N-lists of 2-itemsets
     private static long achieveGlobalFrequentItems() throws IOException, InterruptedException {
         long start = System.currentTimeMillis();
 
@@ -166,16 +192,70 @@ public class Slave {
         return System.currentTimeMillis() - start;
     }
 
-    // to be implemented
     private static void achieveGlobalFrequentItemsets(String dataFileName) throws IOException, InterruptedException {
         achieveGlobalFrequentItems();
 
     }
 
-    // to be implemented (SELF NOTE: check DP3)
-    private static void achieveGlobalFrequentItemsetsParts(String dataFileName) throws IOException, InterruptedException {
-        achieveGlobalFrequentItems();
 
+    private static void handleMasterCommunication() throws IOException {
+        ID = dis.readInt();
+        String[] parameters = dis.readUTF().split(" ");
+
+        // Send acknowledgment to the Master
+        dos.writeUTF("ACK");
+        dos.flush();
+    }
+
+    private static String receiveTask() throws IOException {
+        // Request a task from the Master
+        dos.writeUTF(TASK_REQUEST);
+        dos.flush();
+
+        // Receive the task
+        return dis.readUTF();
+    }
+
+    private static void sendTaskCompleted() throws IOException {
+        // Inform the Master that there are no more tasks
+        dos.writeUTF(NO_MORE_TASK);
+        dos.flush();
+    }
+
+    private static void sendTaskCompleted(int numFreqItemsets) throws IOException {
+        // Inform the Master that the task is completed and send the result
+        dos.writeUTF(TASK_COMPLETED);
+        dos.writeInt(numFreqItemsets);
+        dos.flush();
+    }
+
+
+    private static int processTask(String task) throws IOException, InterruptedException {
+        if (task.equals(TASK_REQUEST)) {
+            // Master requested a task, perform the task and return the number of frequent itemsets
+            String frequent2Itemset = receiveFrequent2Itemset();
+            return mineFrequentKItemsets(frequent2Itemset);
+        } else {
+            // Handle other types of tasks if needed
+            return 0;
+        }
+    }
+
+    private static String receiveFrequent2Itemset() throws IOException {
+        // Receive frequent 2-itemset from Master
+        return dis.readUTF();
+    }
+
+    private static int mineFrequentKItemsets(String frequent2Itemset) throws IOException, InterruptedException {
+        long start = System.currentTimeMillis();
+
+        System.out.println("=> Mining frequent k-itemsets for: " + frequent2Itemset);
+        int localFreqKItemsetsCount = alg.mining_frequent_kItemsets_PART(frequent2Itemset);
+
+        // Notify Master that the task is completed
+        sendTaskCompleted(localFreqKItemsetsCount);
+
+        return localFreqKItemsetsCount;
     }
 
 }

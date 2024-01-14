@@ -66,6 +66,13 @@ public class Master {
 	private static final BlockingQueue<String> taskQueue = new LinkedBlockingQueue<>();
 	private static final BlockingQueue<String> finishSignalQueue = new LinkedBlockingQueue<>();
 
+    // For part 3
+	private static final String TASK_REQUEST = "TASK_REQUEST";
+	private static final String NO_MORE_TASK = "NO_MORE_TASK";
+	private static final String TASK_COMPLETED = "TASK_COMPLETED";
+	private static final String NUM_FREQ_ITEMSETS = "NUM_FREQ_ITEMSETS";
+	private static final BlockingQueue<Integer> slaveResultsQueue = new LinkedBlockingQueue<>();
+
 	public static void main(String[] args) throws Exception {
 		System.out.println("Master's IP Address: " + InetAddress.getLocalHost().getHostAddress().trim());
 
@@ -240,28 +247,6 @@ public class Master {
 		return isReady;
 	}
 
-	/**
-	 * Send the same parameters to slaves. Each thread sends to one slave.
-	 * @param slaves
-	 * @param parameter
-	 * @return true if successful, otherwise failed
-	 */
-	private static boolean sendParameters_toSlaves(ArrayList<SlaveInfo> slaves, String parameter){
-		try{
-			int thread_count = slaves.size();
-			Thread[] threads = new Thread[thread_count];
-			for(int i=0; i<thread_count; i++){
-				threads[i] = new ParameterSendingThread(i, slaves.get(i).socket, parameter);
-				threads[i].start();
-			}
-			for(int i=0; i<threads.length; i++) threads[i].join();
-
-			return true;
-		}catch(Exception e){
-			System.out.println(e.getMessage());
-			return false;
-		}
-	}
 
 	/**
 	 * Send the parameters to slaves. Each thread sends to one slave.
@@ -325,7 +310,7 @@ public class Master {
 
 	//////////////////////////////////////////////////////////////////////////////////////////////
 
-	// SELF NOTE: cooparate with slaves ? (check DP3 again to see how to implement)
+
 
 
 
@@ -362,7 +347,7 @@ public class Master {
 		System.out.println("=> Memory used in (MB): " + memoryLogger.getMaxUsedMemory());
 
 		ArrayList<SlaveInfo> slaves = new ArrayList<SlaveInfo>();
-		// SELF NOTE: Add slave information to the list (similar to what's done in the DP3 master code)
+
 
 		// Establish connections to slaves
 		if (!establishConnections(slaves)) {
@@ -379,7 +364,6 @@ public class Master {
 			return -1;
 		}
 
-		// Parts below are only example methods, to be finished
 
 		// Receive and process information from slaves
 		Thread[] receivingThreads = new Thread[slaves.size()];
@@ -393,16 +377,10 @@ public class Master {
 			thread.join();
 		}
 
-		// SELF NOTE: Rest of the algorithm (check DP3 again, implement part 3 of Master algorithm,
-		// check sending and receiveing methods, organize code better in the end)
-		// SELF NOTE: Check error handling (check DP3, see how it is usually done in Java)
-
 		return System.currentTimeMillis() - start;
-
 
 	}
 
-	// TBD (check PrePostPlusE)
 	private static boolean cooperate_with_slaves() {
 		try {
 			long constructionTime = constructLocalPPCTree(global_frequent_items);
@@ -414,7 +392,6 @@ public class Master {
 			// Send frequent items and N-lists of 2-itemsets to all slaves
 			sendGlobalFrequentItemsAndNListsToSlaves(slaves);
 
-			// To be implemented
 
 		} catch (InterruptedException | IOException e) {
 			e.printStackTrace();
@@ -423,7 +400,6 @@ public class Master {
 		return true;
 	}
 
-	// SELF NOTE: this needs to be changed, see send_globalFrequentItems method from DP3
 	private static void sendGlobalFrequentItemsAndNListsToSlaves(ArrayList<SlaveInfo> slaves) {
 		String globalFrequentItemsString = convertGlobalFrequentItemsToString(global_frequent_items);
 		String nListsOf2ItemsetsString = convertNListsOf2ItemsetsToString(...);
@@ -432,6 +408,125 @@ public class Master {
 
 		sendToAllSlaves(slaves, message);
 	}
+
+	private static long write_global_frequent_items() throws IOException{
+		long start = System.currentTimeMillis();
+		String result_filename = Config.output_data_directory + Options.filter_filename +
+				("_" + Options.support_threshold + "_items").replace(".", "");
+
+		BufferedWriter output = new BufferedWriter(new FileWriter(result_filename));
+		StringBuilder sb = new StringBuilder();
+		for(ItemSupport itemSupport : global_frequent_items){
+			output.write(sb.append(itemSupport.item).append(':').append(itemSupport.support).append('\n').toString());
+			sb.setLength(0);
+		}
+		output.flush();
+		output.close();
+		Master.frequent_itemset_count = global_frequent_items.size();
+
+		return System.currentTimeMillis()-start;
+	}
+
+	private static void sendTaskRequest(SlaveInfo slave) {
+		sendToSlave(slave, TASK_REQUEST);
+	}
+
+	private static void sendNoMoreTask(SlaveInfo slave) {
+		sendToSlave(slave, NO_MORE_TASK);
+	}
+
+	private static void sendToSlave(SlaveInfo slave, String message) {
+		try (PrintWriter out = new PrintWriter(slave.socket.getOutputStream(), true)) {
+			out.println(message);
+		} catch (IOException e) {
+			System.out.println("Error sending message to slave: " + e.getMessage());
+		}
+	}
+
+	private static void handleSlaveRequests(List<SlaveInfo> slaves, List<String> frequent2Itemsets) {
+		// Send tasks to slaves
+		for (SlaveInfo slave : slaves) {
+			sendTaskRequest(slave);
+		}
+
+		// Keep track of tasks sent
+		int tasksSent = slaves.size();
+
+		// Continue distributing tasks until there are no more tasks
+		while (tasksSent > 0) {
+			try {
+				// Wait for a slave to complete a task and receive the result
+				int numFreqItemsets = slaveResultsQueue.take();
+
+				// Process the result (e.g., accumulate totals)
+				frequent_itemset_count += numFreqItemsets;
+
+				// Send a new task to the slave that just completed
+				sendTaskRequest(slaves.get(tasksSent % slaves.size()));
+				tasksSent++;
+			} catch (InterruptedException e) {
+				System.out.println("Error handling slave requests: " + e.getMessage());
+			}
+		}
+
+		// Notify all slaves that there are no more tasks
+		for (SlaveInfo slave : slaves) {
+			sendNoMoreTask(slave);
+		}
+
+		// Collect the final results
+		int totalFreqItemsets = 0;
+		for (SlaveInfo slave : slaves) {
+			totalFreqItemsets += slaveResultsQueue.poll();
+		}
+
+	}
+
+	// Define a method to handle a connection from a slave and process its requests
+	private static void handleSlaveConnection(Socket slaveSocket) {
+		try (BufferedReader in = new BufferedReader(new InputStreamReader(slaveSocket.getInputStream()));
+			 PrintWriter out = new PrintWriter(slaveSocket.getOutputStream(), true)) {
+
+			String request;
+			while ((request = in.readLine()) != null) {
+				switch (request) {
+					case TASK_REQUEST:
+						// Process task request from slave
+						String task = getNextTaskFromQueue(); // Implement this method to get the next task
+						if (task != null) {
+							out.println(task);
+						} else {
+							// No more tasks
+							out.println(NO_MORE_TASK);
+						}
+						break;
+
+					case TASK_COMPLETED:
+						// Process completion notification from slave
+						int numFreqItemsets = Integer.parseInt(in.readLine());
+						slaveResultsQueue.put(numFreqItemsets);
+						break;
+
+					default:
+						System.out.println("Unexpected request from slave: " + request);
+						break;
+				}
+			}
+		} catch (IOException | InterruptedException e) {
+			System.out.println("Error handling slave connection: " + e.getMessage());
+		}
+	}
+
+	private static String getNextTaskFromQueue() {
+		try {
+			// Attempt to retrieve the next task from the queue, waiting if necessary
+			return taskQueue.poll(1, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			// Handle the interruption (e.g., log the error)
+			System.err.println("Error getting next task from queue: " + e.getMessage());
+			Thread.currentThread().interrupt();  // Restore interrupted status
+			return null;
+		}
 
 }
 
