@@ -1,0 +1,62 @@
+ l:2
+ l c:2
+ l c d:2
+ l d:2
+ e:8
+ e b:3
+ e b f:2
+ e b g:2
+ e a:3
+ e a h:3
+ e a h f:2
+ e a h f g:2
+ e a h f g d:2
+ e a h f d:2
+ e a h g:2
+ e a h g d:2
+ e a h d:3
+ e a f:2
+ e a f g:2
+ e a f g d:2
+ e a f d:2
+ e a g:2
+ e a g d:2
+ e a d:3
+ e h:5
+ e h f:4
+ e h f g:3
+ e h f g d:2
+ e h f d:3
+ e h g:3
+ e h g d:2
+ e h d:4
+ e f:6
+ e f g:4
+ e f g d:2
+ e f d:4
+ e g:5
+ e g d:2
+ e d:5
+ c:10
+ c h:3
+ c h f:2
+ c h f g:2
+ c h g:3
+ c f:4
+ c f g:3
+ c f g d:2
+ c f d:3
+ c g:7
+ c g d:4
+ c d:7
+ h:10
+ h f:8
+ h f g:7
+ h f g d:5
+ h f d:6
+ h g:8
+ h g d:5
+ h d:7
+ g:14
+ g d:9
+ d:15
